@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/joho/godotenv"
 	"log"
 	useCases "messages/core/use-cases"
 	"messages/infrastructure/gateway/event/impl"
@@ -13,6 +14,11 @@ import (
 )
 
 func main() {
+	// Envs
+	if err := godotenv.Load("./devEnv/.env"); err != nil {
+		log.Printf("Failed to load envs: %v", err)
+	}
+
 	// Routes
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
@@ -30,8 +36,12 @@ func main() {
 	router.Mount("/messages", controller.NewMessageController(sendTopicsAndQueues))
 
 	// Start server
-	port := fmt.Sprintf(":%s", os.Getenv("PORT"))
-	if err := http.ListenAndServe(port, router); err != nil {
+	port := os.Getenv("PORT")
+	if port == "" {
+		panic("PORT env is required")
+	}
+	println("Server started on port " + port)
+	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), router); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 		return
 	}

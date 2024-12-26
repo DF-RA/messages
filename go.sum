@@ -17,6 +17,8 @@ github.com/ibm-messaging/mq-golang-jms20 v1.13.0 h1:QkXwIzrXRXn4QlvECWh9W2r4yEd6
 github.com/ibm-messaging/mq-golang-jms20 v1.13.0/go.mod h1:oyyrK++j5yVGOFEcDMrOKZ4tcJ+qTKTQ8a9xy/D0saE=
 github.com/ibm-messaging/mq-golang/v5 v5.6.0 h1:EvK6eEUzFu7E7R/jyoSr6cQFtWj8GsjAUzpaO936kjI=
 github.com/ibm-messaging/mq-golang/v5 v5.6.0/go.mod h1:xCV0vl1+ik3VyWZnwAj++2J89vSTzhXP1gXhG0X3IYE=
+github.com/joho/godotenv v1.5.1 h1:7eLL/+HRGLY0ldzfGMeQkb7vMd0as4CfYvUVzLqw0N0=
+github.com/joho/godotenv v1.5.1/go.mod h1:f4LDr5Voq0i2e/R5DDNOoa2zzDfwtkZa6DnEwAbqwq4=
 github.com/klauspost/compress v1.15.9 h1:wKRjX6JRtDdrE9qwa4b/Cip7ACOshUI4smpCQanqjSY=
 github.com/klauspost/compress v1.15.9/go.mod h1:PhcZ0MbTNciWF3rruxRgKxI5NkcHHrHUDtV4Yw2GlzU=
 github.com/leodido/go-urn v1.4.0 h1:WT9HwE9SGECu3lg4d/dIA+jxlljEa1/ffXKmRjqdmIQ=
