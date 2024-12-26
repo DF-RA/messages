@@ -14,7 +14,7 @@ type ActiveMQConfig interface {
 
 func NewActiveMQConfig() *ActiveMQConfigImpl {
 	host := os.Getenv("ACTIVEMQ_HOST")
-	port := os.Getenv("ACTIVEMQ_PORT")
+	port := os.Getenv("ACTIVEMQ_PORT_HTTP")
 	user := os.Getenv("ACTIVEMQ_USER")
 	password := os.Getenv("ACTIVEMQ_PASSWORD")
 	url := fmt.Sprintf("http://%s:%s@%s:%s/api/message", user, password, host, port)

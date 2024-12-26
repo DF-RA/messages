@@ -1,0 +1,62 @@
+services:
+  app:
+    build:
+      dockerfile: Dockerfile
+      context: ..
+    env_file:
+      - .env
+    ports:
+      - "${PORT}:${PORT}"
+    networks:
+      - messages
+
+  activemq:
+    image: webcenter/activemq
+    env_file:
+      - .env
+    ports:
+      - "${ACTIVEMQ_PORT_HTTP}:8161"
+      - "61616:61616"
+      - "61613:61613"
+    environment:
+      ACTIVEMQ_CONFIG_MINMEMORY: 512
+      ACTIVEMQ_CONFIG_MAXMEMORY: 768
+      ACTIVEMQ_ADMIN_LOGIN: ${ACTIVEMQ_USER}
+      ACTIVEMQ_ADMIN_PASSWORD: ${ACTIVEMQ_PASSWORD}
+    networks:
+      - messages
+
+  kafka:
+    image: wurstmeister/kafka
+    ports:
+      - "${KAFKA_PORT}:9092"
+    networks:
+      - messages
+    env_file:
+      - .env
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: "${KAFKA_HOST}"
+      KAFKA_ADVERTISED_PORT: "9092"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+
+  zookeeper:
+    image: wurstmeister/zookeeper
+    env_file:
+      - .env
+    ports:
+      - "2181:2181"
+    networks:
+      - messages
+    healthcheck:
+      test: nc -z localhost 2181 || exit -1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+networks:
+  messages:
+    name: messages
