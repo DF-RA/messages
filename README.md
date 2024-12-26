@@ -60,3 +60,48 @@ cp devEnv/env.example devEnv/.env
 ```bash
 docker-compose -f devEnv/docker-compose.yml up --build -d
 ```
+
+## Como usar
+
+### Send Messages
+
+Para usar la herramienta, solo tiene que enviar los mensajes que desea con el siguiente endpoint:
+
+**Endpoint:** `POST /messages/handlers/send`
+
+**Request:**
+
+- **URL:** `localhost:8090/messages/handlers/send`
+- **Method:** `POST`
+- **Headers:**
+  - `Content-Type: application/json`
+- **Body:**
+  ```json
+  {
+      "messages": [
+          {
+              "name": "{nombre del topic o queue}",
+              "platform": "{kafka o ativemq}",
+              "type": "{si es un topic o una queue}",
+              "content": { ... }
+          }
+      ]
+  }
+    ```
+  
+Luego de enviar los mensajes, la respuesta sera de esta forma
+
+**Response:**
+    
+    ```json
+    {
+        "messages": [
+            {
+                "name": "{nombre del topic o queue}",
+                "platform": "{kafka o ativemq}",
+                "type": "{si es un topic o una queue}",
+                "status": "{resultado del envio}",
+            }
+        ]
+    }
+    ```
