@@ -1,8 +1,12 @@
 package repository
 
-import "messages/core/entity"
+import (
+	"context"
+	"messages/core/entity"
+)
 
 type KafkaConsumerRepository interface {
-	Subscribe(topic string, ch chan<- entity.ConsumerEvent) error
-	Unsubscribe() error
+	// Subscribe starts consuming from the given topic.
+	// Events are sent to the returned channel until ctx is cancelled.
+	Subscribe(ctx context.Context, topic string) (<-chan entity.ConsumerEvent, error)
 }

@@ -1,6 +1,7 @@
 package impl
 
 import (
+	"context"
 	"fmt"
 	"messages/core/entity"
 	"messages/infrastructure/config"
@@ -12,8 +13,6 @@ import (
 
 type ActiveMQConsumerRepositoryImpl struct {
 	ActiveMQConfig config.ActiveMQConfig
-	conn           *stomp.Conn
-	sub            *stomp.Subscription
 }
 
 func NewActiveMQConsumerRepositoryImpl() *ActiveMQConsumerRepositoryImpl {
@@ -22,54 +21,48 @@ func NewActiveMQConsumerRepositoryImpl() *ActiveMQConsumerRepositoryImpl {
 	}
 }
 
-func (impl *ActiveMQConsumerRepositoryImpl) Subscribe(name string, destType string, ch chan<- entity.ConsumerEvent) error {
+func (impl *ActiveMQConsumerRepositoryImpl) Subscribe(ctx context.Context, name string, destType string) (<-chan entity.ConsumerEvent, error) {
 	conn, err := stomp.Dial("tcp", impl.ActiveMQConfig.GetBroker(),
 		stomp.ConnOpt.Login(impl.ActiveMQConfig.GetUser(), impl.ActiveMQConfig.GetPassword()),
 	)
 	if err != nil {
-		return fmt.Errorf("error connecting to ActiveMQ: %w", err)
+		return nil, fmt.Errorf("error connecting to ActiveMQ: %w", err)
 	}
-	impl.conn = conn
 
 	destination := fmt.Sprintf("/%s/%s", destType, name)
 	sub, err := conn.Subscribe(destination, stomp.AckAuto)
 	if err != nil {
 		conn.Disconnect()
-		return fmt.Errorf("error subscribing to %s: %w", destination, err)
+		return nil, fmt.Errorf("error subscribing to %s: %w", destination, err)
 	}
-	impl.sub = sub
+
+	ch := make(chan entity.ConsumerEvent, 128)
 
 	go func() {
 		defer close(ch)
-		for msg := range sub.C {
-			if msg.Err != nil {
+		defer conn.Disconnect()
+		for {
+			select {
+			case msg, ok := <-sub.C:
+				if !ok {
+					return
+				}
+				if msg.Err != nil {
+					return
+				}
+				ch <- entity.ConsumerEvent{
+					ID:         uuid.NewString(),
+					Source:     "activemq",
+					Name:       name,
+					Payload:    string(msg.Body),
+					ReceivedAt: time.Now(),
+				}
+			case <-ctx.Done():
+				sub.Unsubscribe()
 				return
-			}
-			ch <- entity.ConsumerEvent{
-				ID:         uuid.NewString(),
-				Source:     "activemq",
-				Name:       name,
-				Payload:    string(msg.Body),
-				ReceivedAt: time.Now(),
 			}
 		}
 	}()
 
-	return nil
-}
-
-func (impl *ActiveMQConsumerRepositoryImpl) Unsubscribe() error {
-	if impl.sub != nil {
-		if err := impl.sub.Unsubscribe(); err != nil {
-			return err
-		}
-		impl.sub = nil
-	}
-	if impl.conn != nil {
-		if err := impl.conn.Disconnect(); err != nil {
-			return err
-		}
-		impl.conn = nil
-	}
-	return nil
+	return ch, nil
 }

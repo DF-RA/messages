@@ -13,7 +13,6 @@ import (
 
 type KafkaConsumerRepositoryImpl struct {
 	KafkaConfig config.KafkaConfig
-	cancel      context.CancelFunc
 }
 
 func NewKafkaConsumerRepositoryImpl() *KafkaConsumerRepositoryImpl {
@@ -22,7 +21,7 @@ func NewKafkaConsumerRepositoryImpl() *KafkaConsumerRepositoryImpl {
 	}
 }
 
-func (impl *KafkaConsumerRepositoryImpl) Subscribe(topic string, ch chan<- entity.ConsumerEvent) error {
+func (impl *KafkaConsumerRepositoryImpl) Subscribe(ctx context.Context, topic string) (<-chan entity.ConsumerEvent, error) {
 	// No GroupID: reads directly from the partition without consumer group coordination.
 	// This avoids rebalancing delays and starts receiving messages immediately.
 	reader := kafka.NewReader(kafka.ReaderConfig{
@@ -31,8 +30,7 @@ func (impl *KafkaConsumerRepositoryImpl) Subscribe(topic string, ch chan<- entit
 		StartOffset: kafka.LastOffset,
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	impl.cancel = cancel
+	ch := make(chan entity.ConsumerEvent, 128)
 
 	log.Printf("[kafka-consumer] subscribed to topic=%s broker=%s", topic, impl.KafkaConfig.GetBroker())
 
@@ -60,13 +58,5 @@ func (impl *KafkaConsumerRepositoryImpl) Subscribe(topic string, ch chan<- entit
 		}
 	}()
 
-	return nil
-}
-
-func (impl *KafkaConsumerRepositoryImpl) Unsubscribe() error {
-	if impl.cancel != nil {
-		impl.cancel()
-		impl.cancel = nil
-	}
-	return nil
+	return ch, nil
 }

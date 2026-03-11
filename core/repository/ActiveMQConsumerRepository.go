@@ -1,8 +1,12 @@
 package repository
 
-import "messages/core/entity"
+import (
+	"context"
+	"messages/core/entity"
+)
 
 type ActiveMQConsumerRepository interface {
-	Subscribe(name string, destType string, ch chan<- entity.ConsumerEvent) error
-	Unsubscribe() error
+	// Subscribe starts consuming from the given destination.
+	// Events are sent to the returned channel until ctx is cancelled.
+	Subscribe(ctx context.Context, name string, destType string) (<-chan entity.ConsumerEvent, error)
 }

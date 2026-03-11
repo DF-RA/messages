@@ -6,67 +6,45 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	useCases "messages/core/use-cases"
-	"messages/core/services"
+	"messages/core/repository"
 	"messages/infrastructure/config"
 )
 
 type ConsumerControllerImpl struct {
-	ConsumeMessages useCases.ConsumeMessages
-	EventStore      services.EventStore
-}
-
-type startRequestDto struct {
-	Source   string `json:"source" validate:"required,oneof=kafka activemq"`
-	Name     string `json:"name" validate:"required"`
-	DestType string `json:"type" validate:"required,oneof=topic queue"`
+	KafkaConsumer    repository.KafkaConsumerRepository
+	ActiveMQConsumer repository.ActiveMQConsumerRepository
 }
 
 func NewConsumerController(
-	consumeMessages useCases.ConsumeMessages,
-	eventStore services.EventStore,
+	kafkaConsumer repository.KafkaConsumerRepository,
+	activeMQConsumer repository.ActiveMQConsumerRepository,
 ) chi.Router {
 	router := chi.NewRouter()
-	consumerEndpoints(router, &ConsumerControllerImpl{
-		ConsumeMessages: consumeMessages,
-		EventStore:      eventStore,
-	})
+	impl := &ConsumerControllerImpl{
+		KafkaConsumer:    kafkaConsumer,
+		ActiveMQConsumer: activeMQConsumer,
+	}
+	router.Get("/events", impl.StreamEvents)
 	return router
 }
 
-func consumerEndpoints(router chi.Router, impl *ConsumerControllerImpl) {
-	router.Post("/start", impl.Start)
-	router.Post("/stop", impl.Stop)
-	router.Get("/events", impl.StreamEvents)
-	router.Delete("/events", impl.ClearEvents)
-}
-
-func (impl *ConsumerControllerImpl) Start(writer http.ResponseWriter, request *http.Request) {
-	body, err := config.GetBody[startRequestDto](request.Body)
-	if err != nil {
-		config.ErrorResponse(writer, http.StatusBadRequest, err)
-		return
-	}
-	if err := impl.ConsumeMessages.Start(body.Source, body.Name, body.DestType); err != nil {
-		config.ErrorResponse(writer, http.StatusInternalServerError, err)
-		return
-	}
-	writer.WriteHeader(http.StatusOK)
-}
-
-func (impl *ConsumerControllerImpl) Stop(writer http.ResponseWriter, request *http.Request) {
-	if err := impl.ConsumeMessages.Stop(); err != nil {
-		config.ErrorResponse(writer, http.StatusInternalServerError, err)
-		return
-	}
-	writer.WriteHeader(http.StatusOK)
-}
-
 func (impl *ConsumerControllerImpl) StreamEvents(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("Content-Type", "text/event-stream")
-	writer.Header().Set("Cache-Control", "no-cache")
-	writer.Header().Set("Connection", "keep-alive")
-	writer.Header().Set("Access-Control-Allow-Origin", "*")
+	source := request.URL.Query().Get("source")
+	name := request.URL.Query().Get("name")
+	destType := request.URL.Query().Get("type")
+
+	if source == "" || name == "" {
+		config.ErrorResponse(writer, http.StatusBadRequest, fmt.Errorf("source and name are required"))
+		return
+	}
+	if source != "kafka" && source != "activemq" {
+		config.ErrorResponse(writer, http.StatusBadRequest, fmt.Errorf("source must be kafka or activemq"))
+		return
+	}
+	if source == "activemq" && destType == "" {
+		config.ErrorResponse(writer, http.StatusBadRequest, fmt.Errorf("type is required for activemq"))
+		return
+	}
 
 	flusher, ok := writer.(http.Flusher)
 	if !ok {
@@ -74,33 +52,38 @@ func (impl *ConsumerControllerImpl) StreamEvents(writer http.ResponseWriter, req
 		return
 	}
 
-	// Send history first
-	for _, event := range impl.EventStore.History() {
-		data, _ := json.Marshal(event)
-		fmt.Fprintf(writer, "data: %s\n\n", data)
-	}
-	flusher.Flush()
+	ctx := request.Context()
 
-	// Subscribe to live events
-	ch := impl.EventStore.Subscribe()
-	defer impl.EventStore.Unsubscribe(ch)
+	writer.Header().Set("Content-Type", "text/event-stream")
+	writer.Header().Set("Cache-Control", "no-cache")
+	writer.Header().Set("Connection", "keep-alive")
+	writer.Header().Set("Access-Control-Allow-Origin", "*")
 
-	for {
-		select {
-		case event, ok := <-ch:
-			if !ok {
-				return
-			}
+	switch source {
+	case "kafka":
+		eventCh, err := impl.KafkaConsumer.Subscribe(ctx, name)
+		if err != nil {
+			fmt.Fprintf(writer, "event: error\ndata: %s\n\n", err.Error())
+			flusher.Flush()
+			return
+		}
+		for event := range eventCh {
 			data, _ := json.Marshal(event)
 			fmt.Fprintf(writer, "data: %s\n\n", data)
 			flusher.Flush()
-		case <-request.Context().Done():
+		}
+
+	case "activemq":
+		eventCh, err := impl.ActiveMQConsumer.Subscribe(ctx, name, destType)
+		if err != nil {
+			fmt.Fprintf(writer, "event: error\ndata: %s\n\n", err.Error())
+			flusher.Flush()
 			return
 		}
+		for event := range eventCh {
+			data, _ := json.Marshal(event)
+			fmt.Fprintf(writer, "data: %s\n\n", data)
+			flusher.Flush()
+		}
 	}
-}
-
-func (impl *ConsumerControllerImpl) ClearEvents(writer http.ResponseWriter, request *http.Request) {
-	impl.EventStore.Clear()
-	writer.WriteHeader(http.StatusNoContent)
 }
