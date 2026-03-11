@@ -10,7 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
-	"messages/core/services"
 	useCases "messages/core/use-cases"
 	"messages/infrastructure/gateway/event/impl"
 	"messages/infrastructure/gateway/web/controller"
@@ -26,25 +25,16 @@ func main() {
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
 
-	// Repository Impl
+	// Producer
 	kafkaRepository := impl.NewKafkaRepositoryImpl()
 	activeMQRepository := impl.NewActiveMqRepositoryImpl()
-
-	// Use cases
-	sendTopicsAndQueues := useCases.NewSendTopicsAndQueues(
-		kafkaRepository,
-		activeMQRepository,
-	)
-
+	sendTopicsAndQueues := useCases.NewSendTopicsAndQueues(kafkaRepository, activeMQRepository)
 	router.Mount("/messages", controller.NewMessageController(sendTopicsAndQueues))
 
-	// Consumer
-	eventStore := services.NewEventStore()
+	// Consumer (per-client, lifecycle tied to SSE connection)
 	kafkaConsumer := impl.NewKafkaConsumerRepositoryImpl()
 	activeMQConsumer := impl.NewActiveMQConsumerRepositoryImpl()
-	consumeMessages := useCases.NewConsumeMessages(kafkaConsumer, activeMQConsumer, eventStore)
-
-	router.Mount("/consumer", controller.NewConsumerController(consumeMessages, eventStore))
+	router.Mount("/consumer", controller.NewConsumerController(kafkaConsumer, activeMQConsumer))
 
 	// Static files (embedded)
 	subFS, err := fs.Sub(staticFiles, "static")
@@ -61,6 +51,5 @@ func main() {
 	println("Server started on port " + port)
 	if err := http.ListenAndServe(fmt.Sprintf(":%s", port), router); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
-		return
 	}
 }

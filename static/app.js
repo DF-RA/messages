@@ -83,55 +83,20 @@ function app() {
     start() {
       this.errorMsg = '';
       this.saveSettings();
-
-      // Clear events before starting a new consumer session
       this.events = [];
-      fetch('/consumer/events', { method: 'DELETE' });
 
-      const body = {
+      const params = new URLSearchParams({
         source: this.source,
-        name: this.name.trim(),
-        type: this.source === 'kafka' ? 'topic' : this.destType,
-      };
+        name:   this.name.trim(),
+        type:   this.source === 'kafka' ? 'topic' : this.destType,
+      });
 
-      fetch('/consumer/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-        .then(res => {
-          if (!res.ok) return res.json().then(e => { throw new Error(e.error || 'Unknown error'); });
-          this.isConnected = true;
-          this.openSSE();
-        })
-        .catch(err => { this.errorMsg = 'Error: ' + err.message; });
-    },
-
-    stop() {
-      fetch('/consumer/stop', { method: 'POST' })
-        .finally(() => {
-          this.isConnected = false;
-          if (this.eventSource) {
-            this.eventSource.close();
-            this.eventSource = null;
-          }
-        });
-    },
-
-    clear() {
-      fetch('/consumer/events', { method: 'DELETE' })
-        .then(() => { this.events = []; });
-    },
-
-    openSSE() {
       if (this.eventSource) this.eventSource.close();
-
-      this.eventSource = new EventSource('/consumer/events');
+      this.eventSource = new EventSource('/consumer/events?' + params.toString());
 
       this.eventSource.onmessage = (e) => {
         const event = JSON.parse(e.data);
         this.events.push(event);
-
         if (this.autoScroll) {
           this.$nextTick(() => {
             const list = document.getElementById('events-list');
@@ -140,10 +105,29 @@ function app() {
         }
       };
 
-      this.eventSource.onerror = () => {
-        this.isConnected = false;
+      this.eventSource.addEventListener('error', (e) => {
+        // Only treat it as a fatal error if the connection was never established
+        // or the server sent an explicit error event.
+        if (e.type === 'error' && this.eventSource.readyState === EventSource.CLOSED) {
+          this.isConnected = false;
+          this.eventSource = null;
+          this.errorMsg = 'Connection lost.';
+        }
+      });
+
+      this.isConnected = true;
+    },
+
+    stop() {
+      if (this.eventSource) {
+        this.eventSource.close();
         this.eventSource = null;
-      };
+      }
+      this.isConnected = false;
+    },
+
+    clear() {
+      this.events = [];
     },
 
     // --- Helpers ---
