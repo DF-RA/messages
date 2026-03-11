@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Messages — Consumer</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
+</head>
+<body x-data="app()" x-init="init()">
+
+  <header>
+    <h1>Messages <span>Consumer</span></h1>
+    <div class="status-dot" :class="isConnected ? 'connected' : 'disconnected'">
+      <span x-text="isConnected ? '● Connected' : '○ Disconnected'"></span>
+      <span x-show="events.length > 0" x-text="' — ' + events.length + ' events'"></span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Controls -->
+    <section class="panel controls-panel">
+      <div class="controls-row">
+        <div class="field-group">
+          <label>Source</label>
+          <div class="btn-group">
+            <button :class="{active: source==='kafka'}" @click="source='kafka'; destType='topic'">Kafka</button>
+            <button :class="{active: source==='activemq'}" @click="source='activemq'">ActiveMQ</button>
+          </div>
+        </div>
+
+        <div class="field-group" x-show="source==='activemq'">
+          <label>Type</label>
+          <div class="btn-group">
+            <button :class="{active: destType==='topic'}" @click="destType='topic'">Topic</button>
+            <button :class="{active: destType==='queue'}" @click="destType='queue'">Queue</button>
+          </div>
+        </div>
+
+        <div class="field-group grow">
+          <label>Name</label>
+          <input x-model="name" type="text" placeholder="topic or queue name" :disabled="isConnected" @keydown.enter="!isConnected && start()">
+        </div>
+
+        <div class="field-group actions">
+          <label>&nbsp;</label>
+          <div class="btn-group">
+            <button class="btn-start" @click="start()" :disabled="isConnected || !name.trim()">▶ Start</button>
+            <button class="btn-stop" @click="stop()" :disabled="!isConnected">■ Stop</button>
+            <button class="btn-clear" @click="clear()">⌫ Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <div x-show="errorMsg" class="error-banner" x-text="errorMsg"></div>
+    </section>
+
+    <!-- View controls -->
+    <section class="panel view-panel">
+      <div class="view-row">
+        <div class="field-group">
+          <label>View</label>
+          <div class="btn-group">
+            <button :class="{active: viewMode==='text'}" @click="viewMode='text'">Plain Text</button>
+            <button :class="{active: viewMode==='json'}" @click="viewMode='json'">JSON</button>
+            <button :class="{active: viewMode==='table'}" @click="viewMode='table'">Table</button>
+          </div>
+        </div>
+
+        <div class="field-group grow" x-show="viewMode !== 'table'">
+          <label>Filter</label>
+          <input x-model="filter" type="text" placeholder="Filter events...">
+        </div>
+
+        <div class="field-group">
+          <label>From</label>
+          <div class="from-row">
+            <input x-model="fromDate" type="datetime-local" class="from-input">
+            <button x-show="fromDate" @click="fromDate = ''" class="btn-clear-from" title="Clear">✕</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Event log -->
+    <section class="panel log-panel">
+      <div class="log-header">
+        <span>Event Log</span>
+        <span class="log-count" x-text="filteredEvents.length + ' / ' + events.length + ' events'"></span>
+      </div>
+
+      <!-- Text view -->
+      <template x-if="viewMode === 'text'">
+        <div class="events-list" id="events-list">
+          <template x-if="filteredEvents.length === 0">
+            <div class="empty-state">No events yet. Start consuming to see messages here.</div>
+          </template>
+          <template x-for="event in filteredEvents" :key="event.ID">
+            <div class="event-row">
+              <span class="event-time" x-text="formatTime(event.ReceivedAt)"></span>
+              <span class="event-source" x-text="event.Source + ':' + event.Name"></span>
+              <span class="event-payload" x-text="event.Payload"></span>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- JSON view -->
+      <template x-if="viewMode === 'json'">
+        <div class="events-list" id="events-list">
+          <template x-if="filteredEvents.length === 0">
+            <div class="empty-state">No events yet. Start consuming to see messages here.</div>
+          </template>
+          <template x-for="event in filteredEvents" :key="event.ID">
+            <div class="event-row json-row">
+              <div class="event-meta">
+                <span class="event-time" x-text="formatTime(event.ReceivedAt)"></span>
+                <span class="event-source" x-text="event.Source + ':' + event.Name"></span>
+              </div>
+              <pre class="event-json" x-html="highlight(event.Payload)"></pre>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- Table view -->
+      <template x-if="viewMode === 'table'">
+        <div class="table-wrapper">
+          <div x-show="filteredEvents.length === 0" class="empty-state">No events yet. Start consuming to see messages here.</div>
+          <table x-show="filteredEvents.length > 0"
+                 @input="e => { if (e.target.dataset.col !== undefined) columnFilters[e.target.dataset.col] = e.target.value }">
+            <thead>
+              <tr x-html="tableHeader()"></tr>
+            </thead>
+            <tbody x-html="tableBody()"></tbody>
+          </table>
+        </div>
+      </template>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

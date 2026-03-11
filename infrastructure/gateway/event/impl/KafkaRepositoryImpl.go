@@ -19,6 +19,11 @@ func NewKafkaRepositoryImpl() *KafkaRepositoryImpl {
 }
 
 func (impl *KafkaRepositoryImpl) SendTopic(message entity.Message) entity.MessageOutput {
+	headers := make([]kafka.Header, len(message.Headers))
+	for i := range message.Headers {
+		headers[i] = kafka.Header{Key: message.Headers[i].Key, Value: []byte(message.Headers[i].Value)}
+	}
+
 	conn, err := kafka.DialLeader(context.Background(), "tcp", impl.KafkaConfig.GetBroker(), message.Name, 0)
 	if err != nil {
 		return entity.MessageOutput{Name: message.Name, Status: err.Error()}
@@ -26,7 +31,7 @@ func (impl *KafkaRepositoryImpl) SendTopic(message entity.Message) entity.Messag
 	if err := conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
 		return entity.MessageOutput{Name: message.Name, Status: err.Error()}
 	}
-	if _, err := conn.WriteMessages(kafka.Message{Value: []byte(message.Content)}); err != nil {
+	if _, err := conn.WriteMessages(kafka.Message{Value: []byte(message.Content), Headers: headers}); err != nil {
 		return entity.MessageOutput{Name: message.Name, Status: err.Error()}
 	}
 	if err := conn.Close(); err != nil {
